@@ -3,12 +3,18 @@ name: Build and publish Go app
 on:
   workflow_call:
     inputs:
+      go_private:
+        required: true
+        type: string
       docker_registry:
         required: true
         type: string
       docker_image_name:
         required: true
         type: string
+    secrets:
+      ssh_private_key:
+        required: true
 
 jobs:
   build:
@@ -19,6 +25,22 @@ jobs:
       packages: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Download modules
+        run: |
+           eval $(ssh-agent -s)
+           mkdir -p ~/.ssh/
+           echo "${{ secrets.ssh_private_key }}" | tr -d '\r' | ssh-add - > /dev/null
+           ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+           go env -w GOPRIVATE=${{ inputs.go_private }}
+           git config --global url."git@github.com:".insteadOf https://github.com/
+           go mod download
+
+      - name: Vendor modules
+        run: go mod vendor
+
       # Login against a Docker registry except on PR
       # https://github.com/docker/login-action
       - name: Log into registry ${{ inputs.docker_registry }}
